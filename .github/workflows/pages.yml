@@ -1,0 +1,52 @@
+name: Publish update website
+on:
+  push:
+    branches: [main]
+    paths: ['site/**', '.github/workflows/pages.yml', 'Scripts/verify-published.py', 'Scripts/release-validate.py']
+  release:
+    types: [published]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: setcrate-pages
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SPARKLE_PUBLIC_KEY: QwOSL8raaBkXFB7tq0jFiIx4kvGnq3xTbENjDMEcpRg=
+      UPDATE_FEED_URL: https://phoenix1485.github.io/setcrate-releases/updates/appcast.xml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Restore and verify the latest published update
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/published
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' > build/releases.txt
+          if [[ -s build/releases.txt ]]; then
+            gh api "repos/$GITHUB_REPOSITORY/releases/latest" > build/published/release.json
+            tag=$(python3 -c 'import json; print(json.load(open("build/published/release.json"))["tag_name"])')
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir build/published --pattern 'Setcrate-*.zip' --pattern SHA256SUMS --pattern pages-source.tar.gz
+            python3 Scripts/verify-published.py build/published
+            cp site/index.html build/published/site/index.html
+            cp site/.nojekyll build/published/site/.nojekyll
+          else
+            cp -R site build/published/site
+          fi
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: build/published/site
+      - name: Deploy verified website and feed
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
