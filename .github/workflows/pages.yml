@@ -12,7 +12,21 @@ concurrency:
   group: setcrate-pages
   cancel-in-progress: false
 jobs:
+  dispatch-release:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      # Release events can report success while Pages keeps the prior artifact.
+      # Deploy through workflow_dispatch on main instead (actions/deploy-pages#383).
+      - name: Schedule verified Pages deployment from main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref main --repo "$GITHUB_REPOSITORY"
   publish:
+    if: github.event_name != 'release'
     runs-on: ubuntu-24.04
     environment:
       name: github-pages
