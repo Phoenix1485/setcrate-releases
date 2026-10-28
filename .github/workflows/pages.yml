@@ -50,7 +50,7 @@ jobs:
           if [[ -s build/releases.txt ]]; then
             gh api "repos/$GITHUB_REPOSITORY/releases/latest" > build/published/release.json
             tag=$(python3 -c 'import json; print(json.load(open("build/published/release.json"))["tag_name"])')
-            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir build/published --pattern 'Setcrate-*.zip' --pattern SHA256SUMS --pattern pages-source.tar.gz
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir build/published --pattern '*.zip' --pattern SHA256SUMS --pattern pages-source.tar.gz
             python3 Scripts/verify-published.py build/published
             cp site/index.html build/published/site/index.html
             cp site/.nojekyll build/published/site/.nojekyll

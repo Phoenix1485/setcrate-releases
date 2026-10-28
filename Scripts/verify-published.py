@@ -8,9 +8,14 @@ release = json.loads((root/'release.json').read_text())
 assert not release.get('draft') and not release.get('prerelease')
 tag = release['tag_name']
 assert __import__('re').fullmatch(r'v\d+\.\d+\.\d+', tag)
-archive = root / f'Setcrate-{tag[1:]}.zip'
+archives = [root / f'{prefix}-{tag[1:]}.zip' for prefix in ('Rumpel-Maschine', 'Setcrate')]
+archives = [p for p in archives if p.is_file()]
+assert len(archives) == 1, 'Expected exactly one app archive'
+archive = archives[0]
 with zipfile.ZipFile(archive) as z:
-    info = plistlib.loads(z.read('Setcrate.app/Contents/Info.plist'))
+    roots = [name for name in ('Rumpel Maschine.app', 'Setcrate.app') if name + '/Contents/Info.plist' in z.namelist()]
+    assert len(roots) == 1, 'Expected exactly one application bundle'
+    info = plistlib.loads(z.read(roots[0] + '/Contents/Info.plist'))
 key = os.environ['SPARKLE_PUBLIC_KEY']
 assert info['SUPublicEDKey'] == key
 assert info['SUFeedURL'] == os.environ['UPDATE_FEED_URL']
