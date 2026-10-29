@@ -32,9 +32,24 @@ import xml.etree.ElementTree as ET
 items = ET.parse(root/'site/updates/appcast.xml').findall('./channel/item')
 item = next(x for x in items if x.findtext('s:version', namespaces=validate.NS)==info['CFBundleVersion'])
 signature = base64.b64decode(item.find('enclosure').get('{'+validate.NS['s']+'}edSignature'), validate=True)
-with tempfile.TemporaryDirectory() as temp:
-    p=pathlib.Path(temp)
-    (p/'public.der').write_bytes(bytes.fromhex('302a300506032b6570032100')+base64.b64decode(key,validate=True))
-    (p/'signature').write_bytes(signature)
-    subprocess.run(['openssl','pkeyutl','-verify','-pubin','-keyform','DER','-inkey',str(p/'public.der'),'-rawin','-in',str(archive),'-sigfile',str(p/'signature')],check=True)
+def verify_signature(file, signature):
+    with tempfile.TemporaryDirectory() as temp:
+        p=pathlib.Path(temp)
+        (p/'public.der').write_bytes(bytes.fromhex('302a300506032b6570032100')+base64.b64decode(key,validate=True))
+        (p/'signature').write_bytes(signature)
+        subprocess.run(['openssl','pkeyutl','-verify','-pubin','-keyform','DER','-inkey',str(p/'public.der'),'-rawin','-in',str(file),'-sigfile',str(p/'signature')],check=True)
+verify_signature(archive, signature)
+if int(info['CFBundleVersion']) >= 8:
+    manifest=root/'installer.json'
+    verify_signature(manifest, base64.b64decode((root/'installer.sig').read_text().strip(),validate=True))
+    m=json.loads(manifest.read_text())
+    assert m['version']==tag[1:] and m['build']==info['CFBundleVersion']
+    assert m['appSHA256']==checksum
+    assert m['filename']==f'Rumpel-Maschine-{tag[1:]}.dmg'
+    installer=root/m['filename']
+    assert installer.stat().st_size==m['length']
+    digest=hashlib.sha256(installer.read_bytes()).hexdigest()
+    assert digest==m['sha256']
+    assert f'{digest}  {installer.name}' in (root/'SHA256SUMS').read_text().splitlines()
+    print('Universal installer verified against its signed manifest and exact app update.')
 print(f'Verified {tag}, build {info["CFBundleVersion"]}: SHA-256, Ed25519, embedded feed and public key.')
